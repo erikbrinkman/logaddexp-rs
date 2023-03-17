@@ -1,7 +1,6 @@
 [package]
 name = "logaddexp"
 version = "0.1.1"
-author = "Erik Brinkman <erik.brinkman@gmail.com>"
 edition = "2021"
 description = "stable implementations of logaddexp and logsumexp"
 repository = "https://github.com/erikbrinkman/logaddexp-rs"
