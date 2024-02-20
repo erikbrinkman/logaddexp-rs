@@ -108,7 +108,7 @@ where
 
     fn ln_sum_exp(self) -> Self::Output {
         if let Some(max) = self.clone().reduce(Self::Output::max) {
-            if max.is_nan() {
+            if !max.is_finite() {
                 max
             } else {
                 let sum = self
@@ -183,7 +183,10 @@ mod tests {
         assert_close!(actual, binary);
 
         assert_eq!(<[f64; 0]>::into_iter([]).ln_sum_exp(), f64::NEG_INFINITY);
-
+	    assert_eq!([f64::NEG_INFINITY; 2].into_iter().ln_sum_exp(), f64::NEG_INFINITY);
+	    assert_eq!([f64::INFINITY; 2].into_iter().ln_sum_exp(), f64::INFINITY);
+	    assert_eq!([f64::NEG_INFINITY, f64::INFINITY].into_iter().ln_sum_exp(), f64::INFINITY);
+        
         assert!([f64::NAN, 1.0].into_iter().ln_sum_exp().is_nan());
     }
 }
