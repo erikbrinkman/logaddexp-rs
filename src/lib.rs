@@ -15,7 +15,7 @@
 //! let ln_large_number_1p = ln_large_number.ln_add_exp(0.0);
 //! ```
 //!
-//! You can use [LogSumExp] to handle an [Iterator] of floats.
+//! You can use [`LogSumExp`] to handle an [Iterator] of floats.
 //!
 //! ```
 //! use logaddexp::LogSumExp;
@@ -23,11 +23,12 @@
 //! (1..100).into_iter().map(|v| v as f64).ln_sum_exp();
 //! ```
 #![warn(missing_docs)]
+#![warn(clippy::pedantic)]
 
 use num_traits::{Float, FloatConst, Zero};
 use std::ops::Add;
 
-/// A trait for computing ln_add_exp
+/// A trait for computing `ln_add_exp`
 pub trait LogAddExp<Rhs = Self> {
     /// The result of the computation
     type Output;
@@ -79,7 +80,7 @@ where
     }
 }
 
-/// A trait for computing ln_sum_exp
+/// A trait for computing `ln_sum_exp`
 pub trait LogSumExp {
     /// The result of the computation
     type Output;
@@ -108,14 +109,14 @@ where
 
     fn ln_sum_exp(self) -> Self::Output {
         if let Some(max) = self.clone().reduce(Self::Output::max) {
-            if !max.is_finite() {
-                max
-            } else {
+            if max.is_finite() {
                 let sum = self
                     .map(|val| (val - max).exp())
                     .reduce(Self::Output::add)
                     .unwrap_or_else(Self::Output::zero);
                 sum.ln() + max
+            } else {
+                max
             }
         } else {
             Self::Output::neg_infinity()
@@ -183,10 +184,16 @@ mod tests {
         assert_close!(actual, binary);
 
         assert_eq!(<[f64; 0]>::into_iter([]).ln_sum_exp(), f64::NEG_INFINITY);
-	    assert_eq!([f64::NEG_INFINITY; 2].into_iter().ln_sum_exp(), f64::NEG_INFINITY);
-	    assert_eq!([f64::INFINITY; 2].into_iter().ln_sum_exp(), f64::INFINITY);
-	    assert_eq!([f64::NEG_INFINITY, f64::INFINITY].into_iter().ln_sum_exp(), f64::INFINITY);
-        
+        assert_eq!(
+            [f64::NEG_INFINITY; 2].into_iter().ln_sum_exp(),
+            f64::NEG_INFINITY
+        );
+        assert_eq!([f64::INFINITY; 2].into_iter().ln_sum_exp(), f64::INFINITY);
+        assert_eq!(
+            [f64::NEG_INFINITY, f64::INFINITY].into_iter().ln_sum_exp(),
+            f64::INFINITY
+        );
+
         assert!([f64::NAN, 1.0].into_iter().ln_sum_exp().is_nan());
     }
 }

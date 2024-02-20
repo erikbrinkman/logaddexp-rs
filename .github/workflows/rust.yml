@@ -22,3 +22,5 @@ jobs:
       run: cargo test --verbose
     - name: Run lints
       run: cargo clippy --verbose -- -D warnings
+    - name: Cehck formatting
+      run: cargo fmt --verbose --check
