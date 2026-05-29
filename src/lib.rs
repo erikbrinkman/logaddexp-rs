@@ -130,6 +130,11 @@ where
     }
 }
 
+#[cfg(feature = "simd")]
+mod simd;
+#[cfg(feature = "simd")]
+pub use simd::SimdLogSumExp;
+
 #[cfg(test)]
 mod tests {
     // The exact-equality asserts below compare against representable special values

@@ -13,3 +13,9 @@ categories = ["mathematics", "science"]
 
 [dependencies]
 num-traits = "0.2"
+wide = { version = "1.4", optional = true }
+
+[features]
+# SIMD-accelerated slice helpers (`f64`/`f32`). Compile with a SIMD-capable
+# target (e.g. `RUSTFLAGS="-C target-cpu=native"`) to get AVX/NEON codegen.
+simd = ["dep:wide"]

@@ -63,3 +63,11 @@ fn bench_ln_sum_exp_naive(bencher: &mut Bencher) {
             .ln()
     });
 }
+
+#[cfg(feature = "simd")]
+#[bench]
+fn bench_ln_sum_exp_simd(bencher: &mut Bencher) {
+    use logaddexp::SimdLogSumExp;
+    let values = sample_values(1024);
+    bencher.iter(|| black_box(values.as_slice()).ln_sum_exp_simd());
+}
