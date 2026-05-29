@@ -20,13 +20,12 @@
 //! ```
 //! use logaddexp::LogSumExp;
 //!
-//! (1..100).into_iter().map(|v| v as f64).ln_sum_exp();
+//! (1..100).map(f64::from).ln_sum_exp();
 //! ```
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 
-use num_traits::{Float, FloatConst, Zero};
-use std::ops::Add;
+use num_traits::{Float, FloatConst, One, Zero};
 
 /// A trait for computing `ln_add_exp`
 pub trait LogAddExp<Rhs = Self> {
@@ -35,8 +34,8 @@ pub trait LogAddExp<Rhs = Self> {
 
     /// Compute the log of the addition of the exponentials
     ///
-    /// This computes the same value value as `(self.exp() + other.exp()).ln()` but in a more
-    /// numerically stable way then computing it using that formula.
+    /// This computes the same value as `(self.exp() + other.exp()).ln()` but in a more
+    /// numerically stable way than computing it using that formula.
     ///
     /// # Examples
     ///
@@ -44,6 +43,7 @@ pub trait LogAddExp<Rhs = Self> {
     /// use logaddexp::LogAddExp;
     /// 100_f64.ln().ln_add_exp(0.0); // 101_f64.ln()
     /// ```
+    #[must_use]
     fn ln_add_exp(self, other: Rhs) -> Self::Output;
 }
 
@@ -69,13 +69,13 @@ where
     }
 }
 
-impl<'a, T> LogAddExp<&'a T> for T
+impl<T> LogAddExp<&T> for T
 where
     T: Float + FloatConst,
 {
     type Output = T;
 
-    fn ln_add_exp(self, other: &'a Self) -> T {
+    fn ln_add_exp(self, other: &Self) -> T {
         self.ln_add_exp(*other)
     }
 }
@@ -87,9 +87,9 @@ pub trait LogSumExp {
 
     /// Compute the log of the sum of exponentials
     ///
-    /// This computes the same value value as `self.map(|v| v.exp()).sum().ln()` but in a more
-    /// numerically stable way then computing it using that formula. This is also slightly more
-    /// stable then doing `self.reduce(|a, b| a.ln_add_exp(b))`.
+    /// This computes the same value as `self.map(|v| v.exp()).sum().ln()` but in a more
+    /// numerically stable way than computing it using that formula. This is also slightly more
+    /// stable than doing `self.reduce(|a, b| a.ln_add_exp(b))`.
     ///
     /// # Examples
     ///
@@ -97,35 +97,50 @@ pub trait LogSumExp {
     /// use logaddexp::LogSumExp;
     /// [1.0, 2.0, 4.0].into_iter().ln_sum_exp();
     /// ```
+    #[must_use]
     fn ln_sum_exp(self) -> Self::Output;
 }
 
 impl<T> LogSumExp for T
 where
-    T: Iterator + Clone,
-    T::Item: Float + FloatConst,
+    T: Iterator,
+    T::Item: Float,
 {
     type Output = T::Item;
 
     fn ln_sum_exp(self) -> Self::Output {
-        if let Some(max) = self.clone().reduce(Self::Output::max) {
-            if max.is_finite() {
-                let sum = self
-                    .map(|val| (val - max).exp())
-                    .reduce(Self::Output::add)
-                    .unwrap_or_else(Self::Output::zero);
-                sum.ln() + max
+        // Online logsumexp: keep a running max and the sum of `exp(val - max)`,
+        // rescaling the accumulated sum whenever a new, larger max appears. This
+        // is a single pass and needs no `Clone` bound on the iterator.
+        let mut max = Self::Output::neg_infinity();
+        let mut sum = Self::Output::zero();
+        for val in self {
+            if val > max {
+                // rescale the previous accumulation onto the new, larger max
+                sum = sum * (max - val).exp() + Self::Output::one();
+                max = val;
+            } else if val == max {
+                // `val - max` would be `NaN` when both are `-inf`; add `exp(0) = 1`
+                sum = sum + Self::Output::one();
             } else {
-                max
+                sum = sum + (val - max).exp();
             }
-        } else {
-            Self::Output::neg_infinity()
         }
+        sum.ln() + max
     }
 }
 
+#[cfg(feature = "simd")]
+mod simd;
+#[cfg(feature = "simd")]
+pub use simd::SimdLogSumExp;
+
 #[cfg(test)]
 mod tests {
+    // The exact-equality asserts below compare against representable special values
+    // (the infinities), where `float_cmp` is the intended comparison.
+    #![allow(clippy::float_cmp)]
+
     use super::{LogAddExp, LogSumExp};
 
     macro_rules! assert_close {
@@ -174,11 +189,11 @@ mod tests {
 
     #[test]
     fn test_ln_sum_exp() {
-        let raw = (1..10).into_iter().map(|n| (n as f64).ln());
+        let raw = (1..10).map(|n| f64::from(n).ln());
 
         let binary = raw.clone().reduce(f64::ln_add_exp).unwrap();
-        let expected: u64 = (1..10).sum();
-        assert_close!(binary, (expected as f64).ln());
+        let expected: u32 = (1..10).sum();
+        assert_close!(binary, f64::from(expected).ln());
 
         let actual = raw.ln_sum_exp();
         assert_close!(actual, binary);
@@ -195,5 +210,36 @@ mod tests {
         );
 
         assert!([f64::NAN, 1.0].into_iter().ln_sum_exp().is_nan());
+        assert!([1.0, f64::NAN].into_iter().ln_sum_exp().is_nan());
+    }
+
+    #[test]
+    fn test_ln_sum_exp_single() {
+        assert_close!([3.5_f64].into_iter().ln_sum_exp(), 3.5);
+    }
+
+    #[test]
+    fn test_ln_sum_exp_stable_for_large_values() {
+        // Naively `exp(1000)` overflows to infinity; the stable form must not.
+        let actual = [1000.0_f64, 1000.0, 1000.0].into_iter().ln_sum_exp();
+        assert_close!(actual, 1000.0 + 3_f64.ln());
+        assert!(actual.is_finite());
+    }
+
+    #[test]
+    fn test_ln_sum_exp_order_independent() {
+        // The running rescale means the max can be encountered at any position.
+        let ascending = [-5.0_f64, 0.0, 2.0, 7.5].into_iter().ln_sum_exp();
+        let descending = [7.5_f64, 2.0, 0.0, -5.0].into_iter().ln_sum_exp();
+        assert_close!(ascending, descending);
+    }
+
+    #[test]
+    fn test_ln_sum_exp_no_clone() {
+        // `Vec::drain` yields a non-`Clone` iterator, which the previous
+        // `Clone`-bounded implementation could not accept.
+        let mut values = vec![0.0_f64, 1.0, 2.0];
+        let actual = values.drain(..).ln_sum_exp();
+        assert_close!(actual, [0.0_f64, 1.0, 2.0].into_iter().ln_sum_exp());
     }
 }
