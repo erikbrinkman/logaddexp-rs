@@ -1,11 +1,15 @@
 [package]
 name = "logaddexp"
 version = "0.1.3"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 description = "stable implementations of logaddexp and logsumexp"
 repository = "https://github.com/erikbrinkman/logaddexp-rs"
+documentation = "https://docs.rs/logaddexp"
+readme = "README.md"
 license = "MIT"
-keywords = [ "logaddexp", "logsumexp" ]
+keywords = ["logaddexp", "logsumexp"]
+categories = ["mathematics", "science"]
 
 [dependencies]
 num-traits = "0.2"
