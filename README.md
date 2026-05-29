@@ -33,3 +33,14 @@ use logaddexp::LogSumExp;
 
 [...].into_iter().ln_sum_exp();
 ```
+
+Features
+--------
+
+- `simd` (off by default) — adds a `SimdLogSumExp` trait with a slice
+  specialized `ln_sum_exp_simd` for `&[f64]`/`&[f32]`, backed by the
+  [`wide`](https://crates.io/crates/wide) crate's vectorized `exp`. The benefit
+  is target dependent: it pays off on x86 with wide native lanes (AVX2/AVX-512)
+  but can lose to a fast scalar `exp` on 128-bit-lane targets such as Apple
+  Silicon, so benchmark on your target and build with
+  `RUSTFLAGS="-C target-cpu=native"`.
