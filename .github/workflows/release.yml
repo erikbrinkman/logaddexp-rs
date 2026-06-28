@@ -4,57 +4,48 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Version bump type
+        description: Version bump
         required: true
         type: choice
         options: [patch, minor, major]
 
-env:
-  CARGO_TERM_COLOR: always
+permissions: {}
+concurrency: { group: release, cancel-in-progress: false }
 
 jobs:
-  gate:
+  build:
     uses: ./.github/workflows/rust.yml
 
   release:
-    needs: gate
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
     steps:
-    - uses: actions/checkout@v4
-    - uses: Swatinem/rust-cache@v2
-    - name: Install cargo-edit
-      run: cargo install cargo-edit --locked
-    - name: Bump version
-      id: version
-      run: |
-        cargo set-version --bump ${{ inputs.bump }}
-        VERSION=$(cargo pkgid | sed 's/.*#//')
-        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-    - name: Commit and tag
-      env:
-        VERSION: ${{ steps.version.outputs.version }}
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add Cargo.toml Cargo.lock
-        git commit -m "v${VERSION}"
-        git tag -a "v${VERSION}" -m "v${VERSION}"
-
-    # publish before pushing — a failed publish leaves no remote trace
-    - name: Authenticate with crates.io
-      uses: rust-lang/crates-io-auth-action@v1
-      id: auth
-    - name: Publish
-      run: cargo publish
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-    - name: Push
-      run: git push --follow-tags
-    - name: Create GitHub release
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: gh release create "v${{ steps.version.outputs.version }}" --generate-notes
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-release }
+      - name: Configure git identity
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Bump, commit, tag
+        run: |
+          cargo release version "${{ inputs.bump }}" --execute --no-confirm
+          VERSION=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')
+          git commit -am "chore: release v${VERSION}"
+          git tag "v${VERSION}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: git push --atomic origin HEAD "v${VERSION}"
+      - run: gh release create "v${VERSION}" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
