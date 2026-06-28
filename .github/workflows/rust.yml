@@ -1,4 +1,4 @@
-name: tests
+name: build
 
 on:
   push:
@@ -26,9 +26,9 @@ jobs:
     - name: Build
       run: cargo build --verbose
     - name: Run tests with coverage
-      run: cargo llvm-cov --verbose
+      run: cargo llvm-cov --verbose --fail-under-lines 90
     - name: Run lints
-      run: cargo clippy --verbose -- -D warnings
+      run: cargo clippy --verbose --tests -- -D warnings
     - name: Run bench lints
       run: cargo +nightly clippy --verbose --benches -- -D warnings
     - name: Check formatting
