@@ -143,7 +143,7 @@ mod tests {
             );
         }};
         ($a:expr, $b:expr, atol = $atol:expr, rtol = $rtol:expr) => {
-            assert_close!($a, $b, rol = $rtol, atol = $atol);
+            assert_close!($a, $b, rtol = $rtol, atol = $atol);
         };
         ($a:expr, $b:expr, rtol = $rtol:expr) => {
             assert_close!($a, $b, rtol = $rtol, atol = 1e-8);
@@ -159,8 +159,17 @@ mod tests {
     #[allow(clippy::float_cmp)]
     #[test]
     fn test_ln_add_exp() {
-        assert_close!(f64::ln_add_exp(1.0, 1.0), 1.0 + 2_f64.ln());
-        assert_close!(1.0.ln_add_exp(2.0), (1_f64.exp() + 2_f64.exp()).ln());
+        assert_close!(
+            f64::ln_add_exp(1.0, 1.0),
+            1.0 + 2_f64.ln(),
+            atol = 1e-8,
+            rtol = 1e-5
+        );
+        assert_close!(
+            1.0.ln_add_exp(2.0),
+            (1_f64.exp() + 2_f64.exp()).ln(),
+            atol = 1e-8
+        );
         assert_close!(f64::ln_add_exp(0.0, &0.0), 2_f64.ln());
         assert_close!(2_f64.ln().ln_add_exp(&0.0), 3_f64.ln());
         assert!(f64::NAN.ln_add_exp(&1.0).is_nan());
